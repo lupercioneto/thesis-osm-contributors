@@ -114,27 +114,6 @@ pause_after_first_editing_day AS (
   FROM ranked_days
   GROUP BY user_id
 ),
-pause_after_first_edit AS (
-  WITH user_edits_ranked AS (
-    SELECT
-      user_id,
-      edit_date::DATE AS edit_day,
-      ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY edit_date::DATE) AS rn
-    FROM user_edits
-  )
-  SELECT
-    user_id,
-    MAX(CASE WHEN rn = 1 THEN edit_day ELSE NULL END) AS first_edit_day,
-    MAX(CASE WHEN rn = 2 THEN edit_day ELSE NULL END) AS second_edit_day,
-    DATE_DIFF('day',
-      MAX(CASE WHEN rn = 1 THEN edit_day ELSE NULL END),
-      MAX(CASE WHEN rn = 2 THEN edit_day ELSE NULL END)
-    ) AS pause_after_first_edit
-  FROM user_edits_ranked
-  WHERE rn <= 2
-  GROUP BY user_id
-),
-
 burstiness AS (
   WITH user_edit_days AS (
     -- Nur einzigartige Edit-Tage pro Nutzer
@@ -431,7 +410,6 @@ SELECT
   us.total_edits * 1.0 / NULLIF(ted.true_edit_days, 0) AS edits_per_day_true,
   DATE_DIFF('day', us.first_edit, us.last_edit) * 1.0 / NULLIF(ted.true_edit_days - 1, 0) AS mean_days_between_edits_true,
   pause_day.pause_after_first_editing_day,
-  pause.pause_after_first_edit,
   EXTRACT(MONTH FROM us.first_edit) AS first_edit_month,
   --spatial metrics
   us.max_country_edits * 1.0 / NULLIF(us.total_edits, 0) AS top_country_ratio,
@@ -505,7 +483,6 @@ LEFT JOIN entropy_calc ec ON us.user_id = ec.user_id
 LEFT JOIN top_country_per_user tcp ON us.user_id = tcp.user_id
 LEFT JOIN true_edit_days ted ON us.user_id = ted.user_id
 LEFT JOIN pause_after_first_editing_day pause_day ON us.user_id = pause_day.user_id
-LEFT JOIN pause_after_first_edit pause ON us.user_id = pause.user_id
 LEFT JOIN first_edit_per_user fepu ON us.user_id = fepu.user_id
 LEFT JOIN weekly_stats ws ON us.user_id = ws.user_id
 LEFT JOIN milestone_features  mf  ON us.user_id = mf.user_id

@@ -75,6 +75,16 @@ total_edits AS (
   FROM user_edits_180
   GROUP BY user_id
 ),
+pause_after_first_editing_day AS (
+  SELECT
+    user_id,
+    DATEDIFF('day',
+             MIN(CASE WHEN rn = 1 THEN edit_day END),
+             MIN(CASE WHEN rn = 2 THEN edit_day END)
+    ) AS pause_after_first_editing_day
+  FROM ranked_days
+  GROUP BY user_id
+),
 pause_after_first_edit AS (
   WITH user_edits_ranked AS (
     SELECT
@@ -399,6 +409,7 @@ SELECT
   ted.true_edit_days * 1.0 /180 AS activity_ratio_true,
   us.total_edits * 1.0 / NULLIF(ted.true_edit_days, 0) AS edits_per_day_true,
   DATE_DIFF('day', us.first_edit, us.last_edit) * 1.0 / NULLIF(ted.true_edit_days - 1, 0) AS mean_days_between_edits_true,
+  pause_day.pause_after_first_editing_day,
   pause.pause_after_first_edit,
   EXTRACT(MONTH FROM us.first_edit) AS first_edit_month,
   --spatial metrics
@@ -453,6 +464,7 @@ SELECT
   us.total_changesets * 1.0 / NULLIF(ted.true_edit_days, 0) AS changesets_per_edit_day,
   us.total_days_valid * 1.0 / NULLIF(us.total_edits, 0) AS avg_days_valid_per_edit,
   ws.active_weeks_26,
+  ws.active_week_ratio,
   mf.days_to_50,
   mf.days_to_100,
   --early ratios
@@ -470,6 +482,7 @@ LEFT JOIN burstiness b ON us.user_id = b.user_id
 LEFT JOIN entropy_calc ec ON us.user_id = ec.user_id
 LEFT JOIN top_country_per_user tcp ON us.user_id = tcp.user_id
 LEFT JOIN true_edit_days ted ON us.user_id = ted.user_id
+LEFT JOIN pause_after_first_editing_day pause_day ON us.user_id = pause_day.user_id
 LEFT JOIN pause_after_first_edit pause ON us.user_id = pause.user_id
 LEFT JOIN first_edit_per_user fepu ON us.user_id = fepu.user_id
 LEFT JOIN weekly_stats ws ON us.user_id = ws.user_id
