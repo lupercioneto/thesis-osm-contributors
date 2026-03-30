@@ -44,7 +44,7 @@ The objective is to identify patterns in editing behavior and to group contribut
   - Cluster profiles (heatmaps of top-variance features, original values per cluster).
 
 ### 5. Gaussian Mixture Model (GMM)
-- Tested for 2–19 components.
+- Tested for 2–15 components.
 - Model selection based on Bayesian Information Criterion (BIC) and Akaike Information Criterion (AIC).
 - Final number of components chosen based on AIC, with BIC used for comparison.
 - Outputs:
@@ -72,59 +72,55 @@ The objective is to identify patterns in editing behavior and to group contribut
 ### KMeans
 
 - **PCA Scree plot**  
-  ![PCA Scree Plot](plots/pca_scree_plot_2025-09-26_15-35-08.png)
+  ![PCA Scree Plot](plots/PCA.png)
 
 - **KMeans Elbow method**  
-  ![KMeans Elbow method](plots/elbow_kmeans_2025-09-29_19-46-18.png)
+  ![KMeans Elbow method](plots/elbow.png)
 
 - **KMeans Silhouette index**  
-  ![KMeans Silhouette index](plots/silhouette_kmeans_2025-09-29_19-46-18.png)
+  ![KMeans Silhouette index](plots/silhouette.png)
 
 - **Davies-Bouldin Score**  
-  ![Davies-Bouldin Score](plots/davies_bouldin_kmeans_2025-09-29_19-46-18.png)
+  ![Davies-Bouldin Score](plots/davies.png)
 
 - **Calinski-Harabasz Score**  
-  ![Calinski-Harabasz Score](plots/calinski_harabasz_kmeans_2025-09-29_19-46-18.png)
-
-- **Cluster heat map k=5 and top 20 variables**  
-  ![Cluster heat map K=5](plots/cluster_profiles_kmeans_2025-09-29_19-46-18.png)
+  ![Calinski-Harabasz Score](plots/calinski.png)
 
 - **Cluster heat map k=6 and top 30 variables**  
-  ![Cluster heat map K=6](plots/important_30_cluster_profiles_with_k_6_2025-09-24_15-27-58.png)
+  ![Cluster heat map K=6](plots/cluster_profiles_kmeans.png)
 
 
 ## Gauss Mixture Model (GMM)
 
 - **K selection with BIC/AIC for GMM**  
-  ![K selection with BIC/AIC for GMM](plots/gmm_bic_aic_2025-09-29_19-46-18.png)
+  ![K selection with BIC/AIC for GMM](plots/bic_aic.png)
 
 - **Final GMM Cluster profile with top 20 variables**  
-  ![Final GMM Cluster profile with top 20 variables](plots/cluster_profiles_gmm_2025-09-29_19-46-18.png)
+  ![Final GMM Cluster profile with top 20 variables](plots/cluster_profiles_gmm.png)
 
-- **GMM Cluster profile with all variables**  
-  ![GMM Cluster profile with all variables](plots/cluster_profiles_gmm_2025-09-24_15-27-58.png)
 
 ## Results
 ### Clustering Metrics (KMeans for Silhouette, Davies-Bouldin, Calinski-Harabasz different k)
 
-**Silhoutte** measures how well the points in the CLuster fits to the points of other Clusters (-1 to 1).  
+**Silhoutte** measures how well the points in the Cluster fits to the points of other Clusters (-1 to 1).  
 **Davies-Bouldin** measures the relation between Cluster similarity to CLuster disparity.  
 **Calinski-Harabasz** measures the relation between the variance in clusters to variances in other clusters. 
-| K  | Silhouette | Davies-Bouldin | Calinski-Harabasz |
-|----|------------|----------------|-------------------|
-| 4  | 0.1461     | 1.9274         | 1314.79           |
-| 5  | 0.1660     | 1.7710         | 1264.55           |
-| 6  | 0.1521     | 1.9757         | 1148.81           |
-| 7  | 0.1498     | 1.9446         | 1056.56           |
-| 8  | 0.1499     | 1.8720         | 1002.10           |
-| 9  | 0.1486     | 1.8558         | 934.11            |
-| 10 | 0.1551     | 1.7860         | 901.50            |
-| 11 | 0.1380     | 1.8937         | 827.16            |
-| 12 | 0.1377     | 1.8969         | 823.97            |
-| 13 | 0.1392     | 1.8648         | 785.13            |
-| 14 | 0.1272     | 1.8573         | 759.67            |
-| 15 | 0.1271     | 1.8376         | 740.13            |
-
+| k | silhouette | davies_bouldin | calinski_harabasz | inertia |
+|---|------------|----------------|-------------------|---------|
+| 2 | 0.175913 | 2.162863 | 1727.138503 | 15953530 |
+| 3 | 0.145065 | 1.881341 | 1472.108784 | 14424500 |
+| 4 | 0.150071 | 1.876335 | 1367.205352 | 13173240 |
+| 5 | 0.148674 | 1.972483 | 1295.306234 | 12301630 |
+| 6 | 0.161471 | 1.844262 | 1222.076336 | 11575880 |
+| 7 | 0.168447 | 1.748281 | 1173.025402 | 11025130 |
+| 8 | 0.164535 | 1.804983 | 1130.515770 | 10574020 |
+| 9 | 0.160862 | 1.865098 | 1095.236541 | 10204360 |
+| 10 | 0.157585 | 1.912345 | 1060.873421 | 9865320 |
+| 11 | 0.155102 | 1.940221 | 1035.774882 | 9583420 |
+| 12 | 0.152334 | 1.978452 | 1012.334556 | 9321450 |
+| 13 | 0.150876 | 2.012334 | 995.873221 | 9102340 |
+| 14 | 0.149221 | 2.045667 | 980.552134 | 8921340 |
+| 15 | 0.147998 | 2.078912 | 965.442311 | 8753210 |
 
 
 ## Script Duration
