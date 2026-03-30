@@ -96,15 +96,6 @@ class OSMClusteringPipeline:
         df = pd.read_parquet(self.parquet_path)
         self.df_filtered_full = df[(df["total_edits"] > 10) & (df["left_early"] == False)].copy()
 
-   #     drop_features = [
-    #        'days_to_100', 'active_week_ratio', 'edits_per_span_day', 'changesets_per_edit_day',
-    #        'entropy_country_distribution', 'max_country_edits', 'social_facility_ratio',
-    #        'body_of_water_ratio', 'financial_service_ratio', 'wash_facility_ratio', 'place_ratio',
-    #        'waterway_ratio', 
-    ##        'user_id', 'first_edit', 'full_last_edit',
-     #       'first_edit_year', 'first_edit_month', 'top_country', 'top_feature_type_name', 'left_early'
-     #   ]
-
         drop_features = [
             'social_facility_ratio', 'active_week_ratio', 
             'body_of_water_ratio', 'financial_service_ratio', 'wash_facility_ratio', 'place_ratio',
