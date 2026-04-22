@@ -13,6 +13,8 @@ from sklearn.metrics import (
     classification_report,
     confusion_matrix,
     f1_score,
+    precision_recall_curve,
+    average_precision_score,
 )
 from sklearn.model_selection import (
     train_test_split,
@@ -24,8 +26,8 @@ from sklearn.model_selection import (
 # ----------------------------- CONFIG -------------------------------- #
 
 BASE_DIR = Path.cwd()
-print("Base dir:", BASE_DIR)
-PROJECT_ROOT = BASE_DIR.parents[1]
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+print("Base dir:", PROJECT_ROOT)
 
 
 DATA_PATH = (
@@ -46,6 +48,7 @@ RANDOM_STATE = 42
 TUNE_SAMPLE_SIZE = 500_000  # max rows used for tuning
 SHAP_SAMPLE_SIZE = 200      # rows used for SHAP plots
 FEATURE_IMPORTANCE_THRESHOLD = 0.01
+THRESHOLD = 0.5             # decision threshold on class-1 probability
 
 CURRENT_TIME = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -76,6 +79,7 @@ def load_and_prepare_data(path: Path):
     )
 
     # Frequency encoding for categorical columns
+    # Add new encoded columns
     country_freq = df["top_country"].value_counts(normalize=True)
     X["top_country_encoded"] = df["top_country"].map(country_freq)
 
@@ -84,6 +88,7 @@ def load_and_prepare_data(path: Path):
         feature_type_freq
     )
 
+    # Drop encoded columns
     X = X.drop(
         columns=["top_country", "top_feature_type_name"],
         errors="ignore",
@@ -259,6 +264,38 @@ def evaluate_model(model, X_test, y_test, base_filename: str):
     return report_df, predict_time
 
 
+def plot_precision_recall_thresholds(
+    y_test: pd.Series, probas: np.ndarray, base_filename: str
+) -> None:
+    """Plot precision, recall, and F1 score over decision thresholds."""
+    precision, recall, thresholds = precision_recall_curve(y_test, probas)
+    f1_scores = 2 * (precision * recall) / (precision + recall + 1e-8)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(thresholds, precision[:-1], label="Precision")
+    plt.plot(thresholds, recall[:-1], label="Recall")
+    plt.plot(thresholds, f1_scores[:-1], label="F1 Score")
+    plt.axvline(
+        x=THRESHOLD,
+        color="grey",
+        linestyle="--",
+        label=f"Threshold = {THRESHOLD}",
+    )
+    plt.xlabel("Threshold")
+    plt.ylabel("Score")
+    plt.title("Precision-Recall-F1 vs Threshold - Random Forest")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    pr_path = (
+        PLOTS_DIR
+        / f"{base_filename}_precision_recall_thresholds_{CURRENT_TIME}.png"
+    )
+    plt.savefig(pr_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print("Precision-Recall-Threshold plot saved:", pr_path)
+
+
 def plot_shap_beeswarm(model, X_test, base_filename: str):
     """Calculate SHAP values on a sample and save beeswarm plot."""
     n_shap = min(SHAP_SAMPLE_SIZE, len(X_test))
@@ -326,7 +363,7 @@ def save_model_results(
 
 
 def plot_learning_curve(model, X_train, y_train, base_filename: str):
-    """Compute and save learning curve (F1 macro) plot."""
+    """Compute and save learning curve (F1 macro) plot and CSV."""
     train_sizes, train_scores, val_scores = learning_curve(
         estimator=model,
         X=X_train,
@@ -344,6 +381,7 @@ def plot_learning_curve(model, X_train, y_train, base_filename: str):
     val_mean = val_scores.mean(axis=1)
     val_std = val_scores.std(axis=1)
 
+    # -------------------- PLOT -------------------- #
     plt.figure(figsize=(8, 5))
     plt.plot(train_sizes, train_mean, "o-", label="Training score")
     plt.fill_between(
@@ -355,7 +393,10 @@ def plot_learning_curve(model, X_train, y_train, base_filename: str):
 
     plt.plot(train_sizes, val_mean, "o-", label="Cross-validation score")
     plt.fill_between(
-        train_sizes, val_mean - val_std, val_mean + val_std, alpha=0.2
+        train_sizes,
+        val_mean - val_std,
+        val_mean + val_std,
+        alpha=0.2,
     )
 
     plt.xlabel("Training examples")
@@ -363,14 +404,87 @@ def plot_learning_curve(model, X_train, y_train, base_filename: str):
     plt.title("Learning Curve – Random Forest")
     plt.legend(loc="best")
     plt.tight_layout()
-    lc_path = (
-        PLOTS_DIR / f"{base_filename}_learning_curve_{CURRENT_TIME}.png"
-    )
-    plt.savefig(lc_path, dpi=300)
+
+    lc_path = PLOTS_DIR / f"{base_filename}_learning_curve_{CURRENT_TIME}.png"
+    plt.savefig(lc_path, dpi=300, bbox_inches="tight")
     plt.close()
     print("Learning curve plot saved:", lc_path)
 
+    # -------------------- CSV -------------------- #
+    lc_df = pd.DataFrame({
+        "train_size": train_sizes,
+        "train_mean": train_mean,
+        "train_std": train_std,
+        "val_mean": val_mean,
+        "val_std": val_std,
+    })
 
+    lc_csv_path = (
+        METRICS_DIR / f"{base_filename}_learning_curve_{CURRENT_TIME}.csv"
+    )
+    lc_df.to_csv(lc_csv_path, index=False)
+    print("Learning curve CSV saved:", lc_csv_path)
+
+def save_rf_detailed_metrics_csv(
+    model,
+    X_test: pd.DataFrame,
+    y_test: pd.Series,
+    feature_importance_df: pd.DataFrame,
+    base_filename: str,
+) -> None:
+    """Save feature importance, SHAP values, and confusion matrix as CSV files."""
+
+    # --- 1) feature importance ---
+    fi_csv_path = (
+        METRICS_DIR / f"{base_filename}_feature_importance_{CURRENT_TIME}.csv"
+    )
+    feature_importance_df.to_csv(fi_csv_path, index=False)
+    print("Feature importance CSV saved:", fi_csv_path)
+
+    # --- 2) confusion matrix ---
+    y_pred = model.predict(X_test)
+    cm = confusion_matrix(y_test, y_pred)
+
+    cm_df = pd.DataFrame(
+        cm,
+        index=["actual_false_stayed", "actual_true_left_early"],
+        columns=["pred_false_stayed", "pred_true_left_early"],
+    )
+
+    cm_csv_path = (
+        METRICS_DIR / f"{base_filename}_confusion_matrix_{CURRENT_TIME}.csv"
+    )
+    cm_df.to_csv(cm_csv_path)
+    print("Confusion matrix CSV saved:", cm_csv_path)
+
+    # --- 3) SHAP values ---
+    n_shap = min(SHAP_SAMPLE_SIZE, len(X_test))
+    X_sample = X_test.sample(n=n_shap, random_state=RANDOM_STATE).copy()
+
+    # gleiche Reihenfolge wie im Modell
+    X_sample = X_sample.loc[:, model.feature_names_in_]
+    X_sample = X_sample.fillna(-999)
+
+    explainer = shap.TreeExplainer(model)
+    sv_raw = explainer.shap_values(X_sample, check_additivity=False)
+
+    # binary classification
+    if isinstance(sv_raw, list):
+        sv = sv_raw[1]
+    elif sv_raw.ndim == 3:
+        sv = sv_raw[:, :, 1]
+    else:
+        sv = sv_raw
+
+    shap_df = pd.DataFrame(sv, columns=X_sample.columns)
+    shap_df.index = X_sample.index
+    shap_df.index.name = "sample_index"
+
+    shap_csv_path = (
+        METRICS_DIR / f"{base_filename}_shap_values_{CURRENT_TIME}.csv"
+    )
+    shap_df.to_csv(shap_csv_path)
+    print("SHAP values CSV saved:", shap_csv_path)
 
 # ----------------------------- MAIN PIPELINE -------------------------- #
 
@@ -415,8 +529,25 @@ def main():
         final_model, X_test_reduced, y_test, base_filename
     )
 
+    # 6b) Precision-Recall-F1 vs threshold
+    probas = final_model.predict_proba(X_test_reduced)[:, 1]
+    plot_precision_recall_thresholds(
+        y_test=y_test,
+        probas=probas,
+        base_filename=base_filename,
+    )
+
     # 7) SHAP beeswarm
     plot_shap_beeswarm(final_model, X_test_reduced, base_filename)
+
+    # 7b) Save feature importance, SHAP values and confusion matrix as CSV
+    save_rf_detailed_metrics_csv(
+        model=final_model,
+        X_test=X_test_reduced,
+        y_test=y_test,
+        feature_importance_df=feat_imp,
+        base_filename=base_filename,
+    )
 
     # 8) Save result summary and bar plot
     save_model_results(
@@ -427,7 +558,7 @@ def main():
     )
 
     # 9) Learning curve
-    plot_learning_curve(final_model, X_train_reduced, y_train, base_filename)
+    #plot_learning_curve(final_model, X_train_reduced, y_train, base_filename)
 
     print(
         "Total runtime: {:.2f} seconds".format(time.time() - overall_start)

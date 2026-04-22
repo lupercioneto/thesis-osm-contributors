@@ -33,15 +33,15 @@ from scipy.stats import loguniform, uniform
 # ----------------------------- CONFIG -------------------------------- #
 
 BASE_DIR = Path.cwd()
-print("Base dir:", BASE_DIR)
-PROJECT_ROOT = BASE_DIR.parents[1]
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+print("Base dir:", PROJECT_ROOT)
 
 DATA_PATH = (
     PROJECT_ROOT
     / "results"
     / "00_preprocessing"
     / "user_summary"
-    / "cat.parquet"
+    / "pred.parquet"
 )
 
 PLOTS_DIR = PROJECT_ROOT / "results" / "01_prediction" / "supervised_learning" / "plots" / "sgd_classifier"
@@ -57,7 +57,7 @@ MI_SAMPLE_SIZE = 100_000         # rows used for mutual information selection
 N_MI_FEATURES = 35               # k in SelectKBest
 N_ITER_SEARCH = 50               # RandomizedSearch iterations
 CV_SPLITS = 3
-THRESHOLD = 0.25                 # decision threshold on SGD probabilities
+THRESHOLD = 0.5                 # decision threshold on SGD probabilities
 
 CURRENT_TIME = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -91,11 +91,14 @@ def load_and_prepare_data(path: Path) -> tuple[pd.DataFrame, pd.Series]:
         "days_to_100": 9999,
     }
 
+# Add missing-value indicators and impute with large constant for logic-based features
     for col in nan_logic_cols:
         if col in df.columns:
             df[f"{col}_missing"] = df[col].isna().astype(int)
             df[col] = df[col].fillna(imputation_values[col])
 
+# Add missing-value indicators and median-impute selected features
+# so that the model can distinguish structurally missing values from observed ones
     for col in ["top_feature_ratio", "comment_length_ratio"]:
         if col in df.columns:
             df[f"{col}_missing"] = df[col].isna().astype(int)
@@ -400,7 +403,8 @@ def plot_learning_curve_sgd(
     y_train: pd.Series,
     base_filename: str,
 ) -> None:
-    """Compute and save learning curve (F1 macro) for SGDClassifier."""
+    """Compute and save learning curve (F1 macro) for SGDClassifier + CSV export."""
+    
     train_sizes, train_scores, val_scores = learning_curve(
         estimator=model,
         X=X_train_sel,
@@ -418,6 +422,7 @@ def plot_learning_curve_sgd(
     val_mean = val_scores.mean(axis=1)
     val_std = val_scores.std(axis=1)
 
+    # -------------------- PLOT -------------------- #
     plt.figure(figsize=(8, 5))
     plt.plot(train_sizes, train_mean, "o-", label="Training score")
     plt.fill_between(
@@ -427,7 +432,7 @@ def plot_learning_curve_sgd(
         alpha=0.2,
     )
 
-    plt.plot(train_sizes, val_mean, "o-", label="CV score")
+    plt.plot(train_sizes, val_mean, "o-", label="Cross-validation score")
     plt.fill_between(
         train_sizes,
         val_mean - val_std,
@@ -437,15 +442,72 @@ def plot_learning_curve_sgd(
 
     plt.xlabel("Training examples")
     plt.ylabel("F1 Macro Score")
-    plt.title("Learning Curve – SGDClassifier")
+    plt.title("Learning Curve – SGD Classifier")
     plt.legend(loc="best")
     plt.tight_layout()
-    lc_path = (
+
+    lc_plot_path = (
         PLOTS_DIR / f"{base_filename}_learning_curve_{CURRENT_TIME}.png"
     )
-    plt.savefig(lc_path, dpi=300, bbox_inches="tight")
+    plt.savefig(lc_plot_path, dpi=300, bbox_inches="tight")
     plt.close()
-    print("Learning curve plot saved:", lc_path)
+    print("Learning curve plot saved:", lc_plot_path)
+
+    # -------------------- CSV -------------------- #
+    lc_df = pd.DataFrame({
+        "train_size": train_sizes,
+        "train_mean": train_mean,
+        "train_std": train_std,
+        "val_mean": val_mean,
+        "val_std": val_std,
+    })
+
+    lc_csv_path = (
+        METRICS_DIR / f"{base_filename}_learning_curve_{CURRENT_TIME}.csv"
+    )
+    lc_df.to_csv(lc_csv_path, index=False)
+    print("Learning curve CSV saved:", lc_csv_path)
+
+
+def save_coefficients_and_confusion_matrix_csv(
+    model,
+    X_test_sel: np.ndarray,
+    y_test: pd.Series,
+    feature_names: list[str],
+    base_filename: str,
+) -> None:
+    """Save SGD coefficients and confusion matrix values as CSV files."""
+    
+    # --- coefficients ---
+    coefs = model.named_steps["sgdclassifier"].coef_[0]
+    coef_df = pd.DataFrame({
+        "feature": feature_names,
+        "coefficient": coefs,
+        "abs_coefficient": np.abs(coefs),
+    }).sort_values(by="abs_coefficient", ascending=False)
+
+    coef_csv_path = (
+        METRICS_DIR / f"{base_filename}_coefficients_{CURRENT_TIME}.csv"
+    )
+    coef_df.to_csv(coef_csv_path, index=False)
+    print("Coefficient CSV saved:", coef_csv_path)
+
+    # --- confusion matrix ---
+    probas = model.predict_proba(X_test_sel)[:, 1]
+    y_pred = (probas >= THRESHOLD).astype(int)
+
+    cm = confusion_matrix(y_test, y_pred)
+    cm_df = pd.DataFrame(
+        cm,
+        index=["actual_false_stayed", "actual_true_left_early"],
+        columns=["pred_false_stayed", "pred_true_left_early"],
+    )
+
+    cm_csv_path = (
+        METRICS_DIR / f"{base_filename}_confusion_matrix_{CURRENT_TIME}.csv"
+    )
+    cm_df.to_csv(cm_csv_path)
+    print("Confusion matrix CSV saved:", cm_csv_path)
 
 
 # ----------------------------- MAIN PIPELINE -------------------------- #
@@ -508,6 +570,15 @@ def main() -> None:
     # 7) Coefficient-based feature importance
     plot_coefficients(
         model=best_model,
+        feature_names=top_features,
+        base_filename=base_filename,
+    )
+    
+    # 7b) Save coefficients + confusion matrix as CSV
+    save_coefficients_and_confusion_matrix_csv(
+        model=best_model,
+        X_test_sel=X_test_sel,
+        y_test=y_test,
         feature_names=top_features,
         base_filename=base_filename,
     )

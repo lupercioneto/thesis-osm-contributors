@@ -8,7 +8,7 @@ The project is guided by two central research questions:
    Can it be predicted whether an OpenStreetMap (OSM) contributor remains active or stops contributing within the first six months after their initial edit?
 
 2. **Contributor Categorization**  
-   Can OSM contributors be grouped into categories based on a variety of quantitative contribution metrics?
+   Can OSM contributors who remain active beyond the early participation phase be grouped into categories based on a variety of quantitative contribution metrics?
 
 To address these questions, the project integrates large-scale OSM history data, advanced preprocessing workflows in **Python** and **SQL (DuckDB)**, and machine learning approaches.
 

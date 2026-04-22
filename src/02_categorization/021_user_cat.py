@@ -487,7 +487,7 @@ if __name__ == "__main__":
     pipeline.transform_features()
     pipeline.run_pca(var_threshold=0.9)
     print("PCA completed: ", round(time.time() - start, 2), "seconds")
-    #pipeline.run_kmeans()
+    pipeline.run_kmeans()
     print("KMeans completed: ", round(time.time() - start, 2), "seconds")
     pipeline.run_gmm()
     print("GMM completed: ", round(time.time() - start, 2), "seconds")
