@@ -55,6 +55,7 @@ class OSMClusteringPipeline:
         # Container for Data
         self.df_filtered_full = None
         self.df_final = None
+        self.user_ids = None
         self.X_pca = None
         self.labels_kmeans = None
         self.labels_gmm = None
@@ -95,6 +96,9 @@ class OSMClusteringPipeline:
     def load_and_filter(self):
         df = pd.read_parquet(self.parquet_path)
         self.df_filtered_full = df[(df["total_edits"] > 10) & (df["left_early"] == False)].copy()
+
+        if "user_id" in self.df_filtered_full.columns:
+            self.user_ids = self.df_filtered_full["user_id"].copy()
 
         drop_features = [
             'social_facility_ratio', 'active_week_ratio', 
@@ -332,6 +336,8 @@ class OSMClusteringPipeline:
         plt.savefig(f"{self.plot_dir}/cluster_profiles_kmeans_{self.current_time}.png")
         plt.close()
 
+        if self.user_ids is not None:
+            df_cluster.insert(0, "user_id", self.user_ids.reindex(df_cluster.index).to_numpy())
         df_cluster.to_parquet(f"{self.output_dir}/kmeans_clusters_{self.current_time}.parquet")
         print("KMeans cluster profiles saved.")
 
@@ -467,6 +473,8 @@ class OSMClusteringPipeline:
         summary_df.to_csv(f"{self.output_dir}/gmm_cluster_size_{self.current_time}.csv", index=False)
         
         # Save final clustered data
+        if self.user_ids is not None:
+            df_cluster.insert(0, "user_id", self.user_ids.reindex(df_cluster.index).to_numpy())
         df_cluster.to_parquet(f"{self.output_dir}/gmm_clusters_{self.current_time}.parquet")
 
         print(f"--- GMM clustering completed in {time.time() - gmm_start_total:.2f}s ---\n")
