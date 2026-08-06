@@ -267,7 +267,11 @@ class OSMClusteringPipeline:
             fixed_idx = k_values.index(fixed_n)
             plt.axvline(fixed_n, color="green", linestyle="--", label=f"Selected k = {fixed_n}")
             plt.scatter(fixed_n, distortions[fixed_idx], color="green", zorder=5)
-        plt.xlabel("Number of clusters (k)")
+
+        X_LABEL_CLUSTERS = "Number of clusters (k)"
+
+
+        plt.xlabel(X_LABEL_CLUSTERS)
         plt.ylabel("Distortion (Inertia)")
         plt.title("Elbow Method")
         plt.grid(True)
@@ -279,7 +283,7 @@ class OSMClusteringPipeline:
         # Davies-Bouldin plot
         plt.figure(figsize=(6, 4))
         plt.plot(k_values, db_scores, marker="o")
-        plt.xlabel("Number of clusters (k)")
+        plt.xlabel(X_LABEL_CLUSTERS)
         plt.ylabel("Davies-Bouldin Score")
         plt.title("Davies-Bouldin Scores for KMeans")
         plt.grid(True)
@@ -290,7 +294,7 @@ class OSMClusteringPipeline:
         # Calinski-Harabasz plot
         plt.figure(figsize=(6, 4))
         plt.plot(k_values, ch_scores, marker="o")
-        plt.xlabel("Number of clusters (k)")
+        plt.xlabel(X_LABEL_CLUSTERS)
         plt.ylabel("Calinski-Harabasz Score")
         plt.title("Calinski-Harabasz Scores for KMeans")
         plt.grid(True)
