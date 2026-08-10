@@ -189,161 +189,386 @@ class OSMClusteringPipeline:
         print(f"Dimensionality reduced from {n_input_features} to {n_selected} features ({reduction_pct:.1f}% reduction).")
 
 
-    def run_kmeans(self, candidate_k=range(2, 16), fixed_n=None, sample_size=10000, selection_method="elbow"):
+    def _calculate_silhouette(self, labels, sample_size):
+        if len(self.X_pca) > sample_size:
+            X_sample, y_sample = resample(
+                self.X_pca,
+                labels,
+                n_samples=sample_size,
+                random_state=42
+            )
+            return silhouette_score(X_sample, y_sample)
+
+        return silhouette_score(self.X_pca, labels)
+
+    def _evaluate_kmeans_candidates(self, k_values, sample_size):
         distortions = []
         silhouette_results = {}
         results = []
-        k_values = list(candidate_k)
 
         for k in k_values:
             print(f"Testing KMeans for k={k} ...")
-            kmeans = KMeans(n_clusters=k, random_state=42, n_init=20)
+
+            kmeans = KMeans(
+                n_clusters=k,
+                random_state=42,
+                n_init=20
+            )
+
             labels = kmeans.fit_predict(self.X_pca)
             distortions.append(kmeans.inertia_)
 
-            # Silhouette (subsample if too large)
-            if len(self.X_pca) > sample_size:
-                X_sample, y_sample = resample(
-                    self.X_pca,
-                    labels,
-                    n_samples=sample_size,
-                    random_state=42
-                )
-                sil = silhouette_score(X_sample, y_sample)
-            else:
-                sil = silhouette_score(self.X_pca, labels)
+            sil = self._calculate_silhouette(
+                labels,
+                sample_size
+            )
+
             silhouette_results[k] = sil
 
-            # Other metrics
-            metrics = self.evaluate_clustering(self.X_pca, labels, sample_size=sample_size)
+            metrics = self.evaluate_clustering(
+                self.X_pca,
+                labels,
+                sample_size=sample_size
+            )
+
             metrics["k"] = k
             metrics["inertia"] = kmeans.inertia_
             results.append(metrics)
 
-        ch_scores = [res["calinski_harabasz"] for res in results]
-        db_scores = [res["davies_bouldin"] for res in results]
+        return distortions, silhouette_results, results
 
-        # choose k
+    def _find_elbow(self, k_values, distortions):
         kl = KneeLocator(
             k_values,
             distortions,
             curve="convex",
             direction="decreasing"
         )
-        best_k_elbow = kl.elbow
-        best_k_silhouette = max(silhouette_results, key=silhouette_results.get)
-        best_k_davies_bouldin = min(zip(k_values, db_scores), key=lambda x: x[1])[0]
-        best_k_calinski_harabasz = max(zip(k_values, ch_scores), key=lambda x: x[1])[0]
 
-        print("Best k (Elbow):", best_k_elbow)
-        print("Best k (Silhouette):", best_k_silhouette)
-        print("Best k (Davies-Bouldin):", best_k_davies_bouldin)
-        print("Best k (Calinski-Harabasz):", best_k_calinski_harabasz)
+        return kl.elbow
 
-        # Save results
+    def _select_best_k(
+    self,
+    selection_method,
+    fixed_n,
+    k_values,
+    best_k_elbow,
+    best_k_silhouette,
+    best_k_davies_bouldin,
+    best_k_calinski_harabasz
+    ):
+        if selection_method == "elbow":
+            return (
+                best_k_elbow
+                if best_k_elbow is not None
+                else best_k_silhouette
+            )
+
+        if selection_method == "silhouette":
+            return best_k_silhouette
+
+        if selection_method == "davies_bouldin":
+            return best_k_davies_bouldin
+
+        if selection_method == "calinski_harabasz":
+            return best_k_calinski_harabasz
+
+        if selection_method == "fixed":
+            if fixed_n is None:
+                raise ValueError(
+                    "fixed_n must be provided when "
+                    "selection_method='fixed'"
+                )
+
+            return fixed_n
+
+        raise ValueError(
+            "selection_method must be one of: "
+            "'elbow', 'silhouette', 'davies_bouldin', "
+            "'calinski_harabasz', 'fixed'"
+        )
+
+    def _save_kmeans_metrics(self, results):
         pd.DataFrame(results).set_index("k").to_csv(
             f"{self.output_dir}/metrics_kmeans_{self.current_time}.csv"
         )
 
-        # Silhouette plot
+    def _plot_silhouette(self, k_values, silhouette_results):
         plt.figure(figsize=(6, 4))
-        plt.plot(k_values, list(silhouette_results.values()), marker="o")
-        plt.xlabel("Number of clusters")
+        plt.plot(
+            k_values,
+            list(silhouette_results.values()),
+            marker="o"
+        )
+        plt.xlabel("Number of clusters (k)")
         plt.ylabel("Silhouette Score")
         plt.title("Silhouette Scores for KMeans")
         plt.grid(True)
         plt.tight_layout()
-        plt.savefig(f"{self.plot_dir}/silhouette_kmeans_{self.current_time}.png")
+        plt.savefig(
+            f"{self.plot_dir}/silhouette_kmeans_{self.current_time}.png"
+        )
         plt.close()
 
-        # Elbow plot
+    def _plot_elbow(
+    self,
+    k_values,
+    distortions,
+    best_k_elbow,
+    selection_method,
+    fixed_n
+    ):
         plt.figure(figsize=(6, 4))
-        plt.plot(k_values, distortions, marker="o", label="Inertia")
+        plt.plot(
+            k_values,
+            distortions,
+            marker="o",
+            label="Inertia"
+        )
+
         if best_k_elbow is not None:
             elbow_idx = k_values.index(best_k_elbow)
-            plt.axvline(best_k_elbow, color="red", linestyle="--", label=f"Kneedle elbow = {best_k_elbow}")
-            plt.scatter(best_k_elbow, distortions[elbow_idx], color="red", zorder=5)
-        if selection_method == "fixed" and fixed_n is not None and fixed_n in k_values:
+            plt.axvline(
+                best_k_elbow,
+                color="red",
+                linestyle="--",
+                label=f"Kneedle elbow = {best_k_elbow}"
+            )
+            plt.scatter(
+                best_k_elbow,
+                distortions[elbow_idx],
+                color="red",
+                zorder=5
+            )
+
+        if (
+            selection_method == "fixed"
+            and fixed_n is not None
+            and fixed_n in k_values
+        ):
             fixed_idx = k_values.index(fixed_n)
-            plt.axvline(fixed_n, color="green", linestyle="--", label=f"Selected k = {fixed_n}")
-            plt.scatter(fixed_n, distortions[fixed_idx], color="green", zorder=5)
+            plt.axvline(
+                fixed_n,
+                color="green",
+                linestyle="--",
+                label=f"Selected k = {fixed_n}"
+            )
+            plt.scatter(
+                fixed_n,
+                distortions[fixed_idx],
+                color="green",
+                zorder=5
+            )
 
-        X_LABEL_CLUSTERS = "Number of clusters (k)"
-
-
-        plt.xlabel(X_LABEL_CLUSTERS)
+        plt.xlabel("Number of clusters (k)")
         plt.ylabel("Distortion (Inertia)")
         plt.title("Elbow Method")
         plt.grid(True)
         plt.legend()
         plt.tight_layout()
-        plt.savefig(f"{self.plot_dir}/elbow_kmeans_{self.current_time}.png")
+        plt.savefig(
+            f"{self.plot_dir}/elbow_kmeans_{self.current_time}.png"
+        )
         plt.close()
 
-        # Davies-Bouldin plot
+    def _plot_davies_bouldin(self, k_values, db_scores):
         plt.figure(figsize=(6, 4))
-        plt.plot(k_values, db_scores, marker="o")
-        plt.xlabel(X_LABEL_CLUSTERS)
+        plt.plot(
+            k_values,
+            db_scores,
+            marker="o"
+        )
+        plt.xlabel("Number of clusters (k)")
         plt.ylabel("Davies-Bouldin Score")
         plt.title("Davies-Bouldin Scores for KMeans")
         plt.grid(True)
         plt.tight_layout()
-        plt.savefig(f"{self.plot_dir}/davies_bouldin_kmeans_{self.current_time}.png")
-        plt.close()
+        plt.savefig(
+            f"{self.plot_dir}/davies_bouldin_kmeans_{self.current_time}.png"
+    )
+    plt.close()
 
-        # Calinski-Harabasz plot
+    def _plot_calinski_harabasz(self, k_values, ch_scores):
         plt.figure(figsize=(6, 4))
-        plt.plot(k_values, ch_scores, marker="o")
-        plt.xlabel(X_LABEL_CLUSTERS)
+        plt.plot(
+            k_values,
+            ch_scores,
+            marker="o"
+        )
+        plt.xlabel("Number of clusters (k)")
         plt.ylabel("Calinski-Harabasz Score")
         plt.title("Calinski-Harabasz Scores for KMeans")
         plt.grid(True)
         plt.tight_layout()
-        plt.savefig(f"{self.plot_dir}/calinski_harabasz_kmeans_{self.current_time}.png")
+        plt.savefig(
+            f"{self.plot_dir}/calinski_harabasz_kmeans_{self.current_time}.png"
+        )
         plt.close()
 
-        # choose final k
-        if selection_method == "elbow":
-            best_k = best_k_elbow if best_k_elbow is not None else best_k_silhouette
-        elif selection_method == "silhouette":
-            best_k = best_k_silhouette
-        elif selection_method == "davies_bouldin":
-            best_k = best_k_davies_bouldin
-        elif selection_method == "calinski_harabasz":
-            best_k = best_k_calinski_harabasz
-        elif selection_method == "fixed":
-            if fixed_n is None:
-                raise ValueError("fixed_n must be provided when selection_method='fixed'")
-            best_k = fixed_n
-        else:
-            raise ValueError(
-                "selection_method must be one of: "
-                "'elbow', 'silhouette', 'davies_bouldin', 'calinski_harabasz', 'fixed'"
-            )
+    def _save_final_clusters(self, best_k):
+        kmeans_final = KMeans(
+            n_clusters=best_k,
+            random_state=42,
+            n_init=20
+        )
 
-        print(f"Final selected k: {best_k}")
-
-        # Final clustering with chosen k
-        kmeans_final = KMeans(n_clusters=best_k, random_state=42, n_init=20)
-        self.labels_kmeans = kmeans_final.fit_predict(self.X_pca)
+        self.labels_kmeans = kmeans_final.fit_predict(
+            self.X_pca
+        )
 
         df_cluster = self.df_final.copy()
         df_cluster["cluster_kmeans"] = self.labels_kmeans
-        cluster_means = df_cluster.groupby("cluster_kmeans").mean()
-        cluster_means.to_csv(f"{self.output_dir}/cluster_means_all_features{self.current_time}.csv")
 
-        top_features = cluster_means.var(axis=0).sort_values(ascending=False).head(20).index
-        plt.figure(figsize=(20, 12))
-        sns.heatmap(cluster_means[top_features], cmap="coolwarm", annot=True, fmt=".2f")
-        plt.title(f"Cluster Profiles (Top 20 Features) K={best_k}")
-        plt.tight_layout()
-        plt.savefig(f"{self.plot_dir}/cluster_profiles_kmeans_{self.current_time}.png")
-        plt.close()
+        cluster_means = (
+            df_cluster
+            .groupby("cluster_kmeans")
+            .mean()
+        )
+
+        cluster_means.to_csv(
+            f"{self.output_dir}/cluster_means_all_features"
+            f"{self.current_time}.csv"
+        )
+
+        top_features = (
+            cluster_means
+            .var(axis=0)
+            .sort_values(ascending=False)
+            .head(20)
+            .index
+        )
+
+        self._plot_cluster_profiles(
+            cluster_means,
+            top_features,
+            best_k
+        )
 
         if self.user_ids is not None:
-            df_cluster.insert(0, "user_id", self.user_ids.reindex(df_cluster.index).to_numpy())
-        df_cluster.to_parquet(f"{self.output_dir}/kmeans_clusters_{self.current_time}.parquet")
+            df_cluster.insert(
+                0,
+                "user_id",
+                self.user_ids
+                .reindex(df_cluster.index)
+                .to_numpy()
+            )
+
+        df_cluster.to_parquet(
+            f"{self.output_dir}/kmeans_clusters_"
+            f"{self.current_time}.parquet"
+        )
+
         print("KMeans cluster profiles saved.")
+
+        return cluster_means
+
+    def _plot_cluster_profiles(
+    self,
+    cluster_means,
+    top_features,
+    best_k
+    ):
+        plt.figure(figsize=(20, 12))
+        sns.heatmap(
+            cluster_means[top_features],
+            cmap="coolwarm",
+            annot=True,
+            fmt=".2f"
+        )
+        plt.title(
+            f"Cluster Profiles (Top 20 Features) K={best_k}"
+        )
+        plt.tight_layout()
+        plt.savefig(
+            f"{self.plot_dir}/cluster_profiles_kmeans_"
+            f"{self.current_time}.png"
+        )
+        plt.close()
+
+    def run_kmeans(
+    self,
+    candidate_k=range(2, 16),
+    fixed_n=None,
+    sample_size=10000,
+    selection_method="elbow"
+    ):
+        k_values = list(candidate_k)
+
+        distortions, silhouette_results, results = (
+            self._evaluate_kmeans_candidates(
+                k_values,
+                sample_size
+            )
+        )
+
+        ch_scores = [
+            result["calinski_harabasz"]
+            for result in results
+        ]
+
+        db_scores = [
+            result["davies_bouldin"]
+            for result in results
+        ]
+
+        best_k_elbow = self._find_elbow(
+            k_values,
+            distortions
+        )
+
+        best_k_silhouette = max(
+            silhouette_results,
+            key=silhouette_results.get
+        )
+
+        best_k_davies_bouldin = min(
+            zip(k_values, db_scores),
+            key=lambda x: x[1]
+        )[0]
+
+        best_k_calinski_harabasz = max(
+            zip(k_values, ch_scores),
+            key=lambda x: x[1]
+        )[0]
+
+        self._save_kmeans_metrics(results)
+
+        self._plot_silhouette(
+            k_values,
+            silhouette_results
+        )
+
+        self._plot_elbow(
+            k_values,
+            distortions,
+            best_k_elbow,
+            selection_method,
+            fixed_n
+        )
+
+        self._plot_davies_bouldin(
+            k_values,
+            db_scores
+        )
+
+        self._plot_calinski_harabasz(
+            k_values,
+            ch_scores
+        )
+
+        best_k = self._select_best_k(
+            selection_method,
+            fixed_n,
+            k_values,
+            best_k_elbow,
+            best_k_silhouette,
+            best_k_davies_bouldin,
+            best_k_calinski_harabasz
+        )
+
+        print(f"Final selected k: {best_k}")
+
+        cluster_means = self._save_final_clusters(best_k)
 
         return best_k, cluster_means
 
