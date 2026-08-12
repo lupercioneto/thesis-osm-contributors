@@ -28,7 +28,7 @@ from sklearn.metrics import (
 from sklearn.feature_selection import SelectKBest, mutual_info_classif
 from sklearn.utils import resample
 from scipy.stats import loguniform, uniform
-
+from joblib import Memory
 
 # ----------------------------- CONFIG -------------------------------- #
 
@@ -181,16 +181,19 @@ def select_features_mi(
 
     return selector, list(top_features)
 
+CACHE_DIR = Path("./cache")
+memory = Memory(CACHE_DIR, verbose=0)
 
 def build_sgd_pipeline() -> any:
     """Create the SGD pipeline with StandardScaler."""
     pipeline = make_pipeline(
-        StandardScaler(),
-        SGDClassifier(
-            random_state=RANDOM_STATE,
-            max_iter=5000,
-            tol=1e-4,
-        ),
+    StandardScaler(),
+    SGDClassifier(
+        random_state=RANDOM_STATE,
+        max_iter=5000,
+        tol=1e-4,
+    ),
+        memory=memory,
     )
     return pipeline
 
