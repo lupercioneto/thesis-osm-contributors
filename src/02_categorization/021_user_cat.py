@@ -202,7 +202,7 @@ class OSMClusteringPipeline:
             )
             return silhouette_score(X_sample, y_sample, random_state=RANDOM_STATE)
 
-        return silhouette_score(self.X_pca, labels)
+        return silhouette_score(self.X_pca, labels, random_state=RANDOM_STATE)
 
     def _evaluate_kmeans_candidates(self, k_values, sample_size):
         distortions = []
