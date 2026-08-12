@@ -39,6 +39,9 @@ PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS_DIR = PROJECT_ROOT / "results" / "02_categorization" / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Helpers Constants
+X_LABEL_CLUSTERS = "Number of clusters (k)"
+RANDOM_STATE = 42
 
 # ----------------------------- CLASS AND FUNCTIONS ------------------- #
 
@@ -61,21 +64,21 @@ class OSMClusteringPipeline:
         self.labels_gmm = None
 
     # ---------- Helper Functions ----------
-    @staticmethod
-    def evaluate_clustering(X, labels, sample_size=None, random_state=42):
-        if sample_size and X.shape[0] > sample_size:
-            rng = np.random.default_rng(random_state)
-            idx = rng.choice(X.shape[0], sample_size, replace=False)
-            x_sample = X[idx]
-            labels_sample = labels[idx]
-        else:
-            x_sample = X
-            labels_sample = labels
-        return {
-            'silhouette': float(silhouette_score(x_sample, labels_sample)),
-            'davies_bouldin': float(davies_bouldin_score(x_sample, labels_sample)),
-            'calinski_harabasz': float(calinski_harabasz_score(x_sample, labels_sample))
-        }
+        @staticmethod
+        def evaluate_clustering(X, labels, sample_size=None):
+            if sample_size and X.shape[0] > sample_size:
+                rng = np.random.default_rng(RANDOM_STATE)
+                idx = rng.choice(X.shape[0], sample_size, replace=False)
+                x_sample = X[idx]
+                labels_sample = labels[idx]
+            else:
+                x_sample = X
+                labels_sample = labels
+            return {
+                'silhouette': float(silhouette_score(x_sample, labels_sample, random_state=RANDOM_STATE)),
+                'davies_bouldin': float(davies_bouldin_score(x_sample, labels_sample)),
+                'calinski_harabasz': float(calinski_harabasz_score(x_sample, labels_sample))
+            }
 
     @staticmethod
     def find_optimal_n(data, n_range, threshold=0.01):
@@ -153,7 +156,7 @@ class OSMClusteringPipeline:
     def run_pca(self, var_threshold=0.9):
         n_input_features = self.df_final.shape[1]
 
-        pca = PCA(n_components=var_threshold)
+        pca = PCA(n_components=var_threshold, random_state=RANDOM_STATE)
         self.X_pca = pca.fit_transform(self.df_final)
 
         explained = np.cumsum(pca.explained_variance_ratio_)
@@ -195,9 +198,9 @@ class OSMClusteringPipeline:
                 self.X_pca,
                 labels,
                 n_samples=sample_size,
-                random_state=42
+                random_state=RANDOM_STATE
             )
-            return silhouette_score(X_sample, y_sample)
+            return silhouette_score(X_sample, y_sample, random_state=RANDOM_STATE)
 
         return silhouette_score(self.X_pca, labels)
 
@@ -211,7 +214,7 @@ class OSMClusteringPipeline:
 
             kmeans = KMeans(
                 n_clusters=k,
-                random_state=42,
+                random_state=RANDOM_STATE,
                 n_init=20
             )
 
@@ -300,7 +303,8 @@ class OSMClusteringPipeline:
             list(silhouette_results.values()),
             marker="o"
         )
-        plt.xlabel("Number of clusters (k)")
+
+        plt.xlabel(X_LABEL_CLUSTERS)
         plt.ylabel("Silhouette Score")
         plt.title("Silhouette Scores for KMeans")
         plt.grid(True)
@@ -360,7 +364,7 @@ class OSMClusteringPipeline:
                 zorder=5
             )
 
-        plt.xlabel("Number of clusters (k)")
+        plt.xlabel(X_LABEL_CLUSTERS)
         plt.ylabel("Distortion (Inertia)")
         plt.title("Elbow Method")
         plt.grid(True)
@@ -378,7 +382,7 @@ class OSMClusteringPipeline:
             db_scores,
             marker="o"
         )
-        plt.xlabel("Number of clusters (k)")
+        plt.xlabel(X_LABEL_CLUSTERS)
         plt.ylabel("Davies-Bouldin Score")
         plt.title("Davies-Bouldin Scores for KMeans")
         plt.grid(True)
@@ -395,7 +399,7 @@ class OSMClusteringPipeline:
             ch_scores,
             marker="o"
         )
-        plt.xlabel("Number of clusters (k)")
+        plt.xlabel(X_LABEL_CLUSTERS)
         plt.ylabel("Calinski-Harabasz Score")
         plt.title("Calinski-Harabasz Scores for KMeans")
         plt.grid(True)
@@ -408,7 +412,7 @@ class OSMClusteringPipeline:
     def _save_final_clusters(self, best_k):
         kmeans_final = KMeans(
             n_clusters=best_k,
-            random_state=42,
+            random_state=RANDOM_STATE,
             n_init=20
         )
 
@@ -592,7 +596,7 @@ class OSMClusteringPipeline:
                 gmm = GaussianMixture(
                     n_components=n,
                     covariance_type='full',
-                    random_state=42
+                    random_state=RANDOM_STATE
                 )
                 gmm.fit(self.X_pca)
 
@@ -657,7 +661,7 @@ class OSMClusteringPipeline:
         gmm_final = GaussianMixture(
             n_components=best_n,
             covariance_type='full',
-            random_state=42
+            random_state=RANDOM_STATE
         )
         self.labels_gmm = gmm_final.fit_predict(self.X_pca)
 
