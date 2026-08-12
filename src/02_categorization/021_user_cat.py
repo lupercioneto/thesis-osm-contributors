@@ -64,21 +64,21 @@ class OSMClusteringPipeline:
         self.labels_gmm = None
 
     # ---------- Helper Functions ----------
-        @staticmethod
-        def evaluate_clustering(X, labels, sample_size=None):
-            if sample_size and X.shape[0] > sample_size:
-                rng = np.random.default_rng(RANDOM_STATE)
-                idx = rng.choice(X.shape[0], sample_size, replace=False)
-                x_sample = X[idx]
-                labels_sample = labels[idx]
-            else:
-                x_sample = X
-                labels_sample = labels
-            return {
-                'silhouette': float(silhouette_score(x_sample, labels_sample, random_state=RANDOM_STATE)),
-                'davies_bouldin': float(davies_bouldin_score(x_sample, labels_sample)),
-                'calinski_harabasz': float(calinski_harabasz_score(x_sample, labels_sample))
-            }
+    @staticmethod
+    def evaluate_clustering(X, labels, sample_size=None):
+        if sample_size and X.shape[0] > sample_size:
+            rng = np.random.default_rng(RANDOM_STATE)
+            idx = rng.choice(X.shape[0], sample_size, replace=False)
+            x_sample = X[idx]
+            labels_sample = labels[idx]
+        else:
+            x_sample = X
+            labels_sample = labels
+        return {
+            'silhouette': float(silhouette_score(x_sample, labels_sample, random_state=RANDOM_STATE)),
+            'davies_bouldin': float(davies_bouldin_score(x_sample, labels_sample)),
+            'calinski_harabasz': float(calinski_harabasz_score(x_sample, labels_sample))
+        }
 
     @staticmethod
     def find_optimal_n(data, n_range, threshold=0.01):
