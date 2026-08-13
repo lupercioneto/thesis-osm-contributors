@@ -147,14 +147,13 @@ def select_features_mi(
     """Mutual information feature selection with SelectKBest, returns selector + feature names."""
     # sample subset for MI (for speed)
     n_sample = min(sample_size, len(X_train))
-    X_sub, y_sub = resample(
+    x_sub, y_sub = resample(
         X_train, y_train, n_samples=n_sample, random_state=RANDOM_STATE
     )
 
     selector = SelectKBest(score_func=mutual_info_classif, k=k_features)
-    selector.fit(X_sub, y_sub)
+    selector.fit(x_sub, y_sub)
 
-    X_train_sel = selector.transform(X_train)
     top_features = X_train.columns[selector.get_support()]
 
     # build MI dataframe for inspection / plot
@@ -200,7 +199,7 @@ def build_sgd_pipeline() -> any:
 
 def tune_sgd(
     pipeline,
-    X_train_sel: np.ndarray,
+    x_train_sel: np.ndarray,
     y_train: pd.Series,
 ) -> tuple[any, dict, float]:
     """Hyperparameter tuning for SGDClassifier using RandomizedSearchCV."""
@@ -247,7 +246,7 @@ def tune_sgd(
         f"(n_iter={N_ITER_SEARCH}, cv={CV_SPLITS})..."
     )
     t0 = time.time()
-    search.fit(X_train_sel, y_train)
+    search.fit(x_train_sel, y_train)
     elapsed = time.time() - t0
     print("Hyperparameter tuning completed in {:.2f} seconds".format(elapsed))
     print("Best parameters:")
@@ -258,13 +257,13 @@ def tune_sgd(
 
 def evaluate_model(
     model,
-    X_test_sel: np.ndarray,
+    x_test_sel: np.ndarray,
     y_test: pd.Series,
     base_filename: str,
 ) -> tuple[pd.DataFrame, float, np.ndarray]:
     """Evaluate model: metrics, confusion matrix, classification report heatmap."""
     t0 = time.time()
-    probas = model.predict_proba(X_test_sel)[:, 1]
+    probas = model.predict_proba(x_test_sel)[:, 1]
     y_pred = (probas >= THRESHOLD).astype(int)
     pred_time = time.time() - t0
     print("Prediction completed in {:.2f} seconds".format(pred_time))
@@ -280,7 +279,7 @@ def evaluate_model(
         confusion_matrix=cm,
         display_labels=["False (stayed)", "True (left early)"],
     )
-    fig, ax = plt.subplots(figsize=(6, 6))
+    _, ax = plt.subplots(figsize=(6, 6))
     disp.plot(ax=ax, cmap="Blues", colorbar=False, values_format="d")
     plt.title("Confusion Matrix – SGD Classifier")
     cm_path = PLOTS_DIR / f"{base_filename}_confusion_matrix_{CURRENT_TIME}.png"
@@ -402,7 +401,7 @@ def save_model_results(
 
 def plot_learning_curve_sgd(
     model,
-    X_train_sel: np.ndarray,
+    x_train_sel: np.ndarray,
     y_train: pd.Series,
     base_filename: str,
 ) -> None:
@@ -410,7 +409,7 @@ def plot_learning_curve_sgd(
     
     train_sizes, train_scores, val_scores = learning_curve(
         estimator=model,
-        X=X_train_sel,
+        X=x_train_sel,
         y=y_train,
         cv=CV_SPLITS,
         scoring="f1_macro",
@@ -474,7 +473,7 @@ def plot_learning_curve_sgd(
 
 def save_coefficients_and_confusion_matrix_csv(
     model,
-    X_test_sel: np.ndarray,
+    x_test_sel: np.ndarray,
     y_test: pd.Series,
     feature_names: list[str],
     base_filename: str,
@@ -496,7 +495,7 @@ def save_coefficients_and_confusion_matrix_csv(
     print("Coefficient CSV saved:", coef_csv_path)
 
     # --- confusion matrix ---
-    probas = model.predict_proba(X_test_sel)[:, 1]
+    probas = model.predict_proba(x_test_sel)[:, 1]
     y_pred = (probas >= THRESHOLD).astype(int)
 
     cm = confusion_matrix(y_test, y_pred)
@@ -543,22 +542,22 @@ def main() -> None:
         base_filename=base_filename,
     )
 
-    X_train_sel = selector.transform(X_train)
-    X_test_sel = selector.transform(X_test)
+    x_train_sel = selector.transform(X_train)
+    x_test_sel = selector.transform(X_test)
     print("Selected features:", len(top_features))
 
     # 4) Build and tune SGD pipeline
     pipeline = build_sgd_pipeline()
-    best_model, best_params, train_time = tune_sgd(
+    best_model, _, train_time = tune_sgd(
         pipeline=pipeline,
-        X_train_sel=X_train_sel,
+        x_train_sel=x_train_sel,
         y_train=y_train,
     )
 
     # 5) Evaluation
     report_df, predict_time, probas = evaluate_model(
         model=best_model,
-        X_test_sel=X_test_sel,
+        x_test_sel=x_test_sel,
         y_test=y_test,
         base_filename=base_filename,
     )
@@ -580,7 +579,7 @@ def main() -> None:
     # 7b) Save coefficients + confusion matrix as CSV
     save_coefficients_and_confusion_matrix_csv(
         model=best_model,
-        X_test_sel=X_test_sel,
+        x_test_sel=x_test_sel,
         y_test=y_test,
         feature_names=top_features,
         base_filename=base_filename,
@@ -597,7 +596,7 @@ def main() -> None:
     # 9) Learning curve
     plot_learning_curve_sgd(
         model=best_model,
-        X_train_sel=X_train_sel,
+        x_train_sel=x_train_sel,
         y_train=y_train,
         base_filename=base_filename,
     )
