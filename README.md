@@ -1,4 +1,15 @@
-# OSM Contributor Analysis - Master's Thesis
+### Fork Repository :evergreen_tree:
+- This repository is an fork created by students at Instituto Federal de Educação, Ciência e Tecnologia do Ceará.
+
+- The changes made were implemented during the Software Testing and Quality course.
+
+- Know about us: 
+  - [lupercioneto](https://github.com/lupercioneto)
+  - [Mateus-RF](https://github.com/Mateus-RF) 
+ 
+---
+
+# OSM Contributor Analysis - Master's Thesis 
 
 ## 1. Overview  
 This repository contains the code and workflows developed for my Master's thesis in Geography/Geoinformatics.  
